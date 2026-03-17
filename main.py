@@ -1,8 +1,9 @@
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import SQLModel, select
+from sqlmodel import SQLModel, delete, select
 
+import db
 from db import SessionDep, db_engine
 from models import TodoBase, TodoPublic, Todos, UserBase, UserLogin, UserPublic, Users
 from security import (
@@ -35,6 +36,18 @@ def get_user_info(token: str, session: SessionDep, attribute):
     statement = select(attribute).where(Users.username == token_username)
     db_user = session.exec(statement).first()
     return db_user
+
+
+def check_permission(user_id: int, todo_id: int, session: SessionDep):
+    statement = select(Todos).where(Todos.id == todo_id)
+    db_todo = session.exec(statement).first()
+    if not db_todo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Activity does not exist"
+        )
+    if db_todo.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return db_todo
 
 
 @app.get("/health")
@@ -127,17 +140,31 @@ def update_todo(
 ):
     token = credentials.credentials
     db_user_id = get_user_info(token, session, Users.id)
-    statement = select(Todos).where(Todos.id == todo_id)
-    db_todo = session.exec(statement).first()
-    if not db_todo:
+    if not db_user_id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Activity does not exist"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
         )
-    if db_todo.user_id != db_user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    db_todo = check_permission(db_user_id, todo_id, session)
     db_todo.title = todo.title
     db_todo.description = todo.description
     session.add(db_todo)
     session.commit()
     session.refresh(db_todo)
     return db_todo
+
+
+@app.delete("/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Todo"])
+def delete_todo(
+    todo_id: int,
+    session: SessionDep,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+):
+    token = credentials.credentials
+    db_user_id = get_user_info(token, session, Users.id)
+    if not db_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
+        )
+    db_todo = check_permission(db_user_id, todo_id, session)
+    session.delete(db_todo)
+    session.commit()
