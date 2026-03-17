@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     postgres_pass: SecretStr
     postgres_db: str
 
+    jwt_hash: str
+    jwt_algo: str
+    jwt_expiry_min: int
+
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(env_file=".env")
 
 

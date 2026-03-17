@@ -3,3 +3,6 @@ uvicorn
 sqlmodel
 pydantic-settings
 psycopg2
+pwdlib[argon2]
+pydantic[email]
+pyjwt
