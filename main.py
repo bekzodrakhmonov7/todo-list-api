@@ -19,6 +19,24 @@ SQLModel.metadata.create_all(db_engine)
 bearer = HTTPBearer()
 
 
+def get_user_info(token: str, session: SessionDep, attribute):
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token_username = payload.get("username")
+    if not token_username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token payload is invalid"
+        )
+    statement = select(attribute).where(Users.username == token_username)
+    db_user = session.exec(statement).first()
+    return db_user
+
+
 @app.get("/health")
 def return_health():
     return {"Success": True}
@@ -73,27 +91,7 @@ def get_current_user(
 ):
     token = credentials.credentials
 
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    username = payload.get("username")
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token payload is invalid"
-        )
-    statement = select(Users).where(Users.username == username)
-    db_user = session.exec(statement).first()
-    if not db_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User no longer exists"
-        )
-
-    return db_user
+    return get_user_info(token, session, Users)
 
 
 @app.post("/todos", response_model=TodoPublic)
@@ -104,20 +102,8 @@ def create_todo(
 ):
     token = credentials.credentials
 
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    token_username = payload.get("username")
-    if not token_username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token payload is invalid"
-        )
-    statement = select(Users.id).where(Users.username == token_username)
-    db_user_id = session.exec(statement).first()
+    db_user_id = get_user_info(token, session, Users.id)
+
     db_todo = Todos.model_validate(todo)
     db_todo.user_id = db_user_id
     try:
@@ -127,6 +113,6 @@ def create_todo(
     except IntegrityError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Error while creating todo",
+            detail="Username or email is already taken.",
         )
     return db_todo
