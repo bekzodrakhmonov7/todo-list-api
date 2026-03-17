@@ -35,6 +35,10 @@ def get_user_info(token: str, session: SessionDep, attribute):
         )
     statement = select(attribute).where(Users.username == token_username)
     db_user = session.exec(statement).first()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
+        )
     return db_user
 
 
@@ -140,10 +144,6 @@ def update_todo(
 ):
     token = credentials.credentials
     db_user_id = get_user_info(token, session, Users.id)
-    if not db_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
-        )
     db_todo = check_permission(db_user_id, todo_id, session)
     db_todo.title = todo.title
     db_todo.description = todo.description
@@ -161,10 +161,24 @@ def delete_todo(
 ):
     token = credentials.credentials
     db_user_id = get_user_info(token, session, Users.id)
-    if not db_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized"
-        )
     db_todo = check_permission(db_user_id, todo_id, session)
     session.delete(db_todo)
     session.commit()
+
+
+@app.get("/todos", response_model=dict[str, list[TodoPublic]], tags=["Todo"])
+def get_todos(
+    session: SessionDep,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    page: int = 1,
+    limit: int = 10,
+):
+    token = credentials.credentials
+    db_user_id = get_user_info(token, session, Users.id)
+    skip = (page - 1) * limit
+    statement = (
+        select(Todos).where(Todos.user_id == db_user_id).offset(skip).limit(limit)
+    )
+    todos = session.exec(statement).all()
+
+    return {"data": todos}
