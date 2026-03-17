@@ -9,14 +9,20 @@ class UserBase(SQLModel):
 
 class Users(UserBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    username: str
-    email: str
+    username: str = Field(unique=True)
+    email: str = Field(unique=True)
     password: str
 
 
 class UserLogin(SQLModel):
     email: str
     password: str
+
+
+class UserPublic(SQLModel):
+    id: int
+    username: str
+    email: str
 
 
 class TodoBase(SQLModel):
