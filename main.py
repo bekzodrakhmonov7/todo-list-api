@@ -94,7 +94,7 @@ def get_current_user(
     return get_user_info(token, session, Users)
 
 
-@app.post("/todos", response_model=TodoPublic)
+@app.post("/todos", response_model=TodoPublic, tags=["Todo"])
 def create_todo(
     session: SessionDep,
     todo: TodoBase,
@@ -115,4 +115,29 @@ def create_todo(
             status_code=status.HTTP_409_CONFLICT,
             detail="Username or email is already taken.",
         )
+    return db_todo
+
+
+@app.put("/todos/{todo_id}", response_model=TodoPublic, tags=["Todo"])
+def update_todo(
+    todo_id: int,
+    session: SessionDep,
+    todo: TodoBase,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+):
+    token = credentials.credentials
+    db_user_id = get_user_info(token, session, Users.id)
+    statement = select(Todos).where(Todos.id == todo_id)
+    db_todo = session.exec(statement).first()
+    if not db_todo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Activity does not exist"
+        )
+    if db_todo.user_id != db_user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    db_todo.title = todo.title
+    db_todo.description = todo.description
+    session.add(db_todo)
+    session.commit()
+    session.refresh(db_todo)
     return db_todo
