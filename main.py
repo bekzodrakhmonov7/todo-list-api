@@ -1,9 +1,8 @@
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import SQLModel, delete, select
+from sqlmodel import SQLModel, select
 
-import db
 from db import SessionDep, db_engine
 from models import TodoBase, TodoPublic, Todos, UserBase, UserLogin, UserPublic, Users
 from security import (
